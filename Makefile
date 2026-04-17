@@ -24,7 +24,7 @@ index:
 ingest: parse index
 
 run:
-	@echo "TODO: implement in Phase 5 — 'uv run streamlit run app.py'"
+	uv run streamlit run app.py
 
 eval:
 	@echo "TODO: implement in Phase 7 — 'uv run python -m eval.run_eval'"

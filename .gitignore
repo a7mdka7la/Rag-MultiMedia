@@ -22,6 +22,7 @@ data/chunks.jsonl
 data/chroma_db/
 data/ingest.log
 data/index.log
+data/streamlit.log
 
 # Claude Code local state (not part of the project)
 .claude/
