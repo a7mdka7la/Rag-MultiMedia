@@ -5,7 +5,6 @@ Groq is mocked: we only want to verify the parsing and plumbing around it.
 
 from __future__ import annotations
 
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -19,7 +18,6 @@ from src.generate import (
     parse_citations,
 )
 from src.retrieve import RetrievedChunk
-
 
 # --------------------------- fixtures ---------------------------
 

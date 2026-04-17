@@ -22,7 +22,6 @@ from src.index import (
     tokenize,
 )
 
-
 # --------------------------- unit tests ---------------------------
 
 

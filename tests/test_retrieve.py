@@ -15,7 +15,6 @@ from src.chunk import Chunk
 from src.index import IndexHandle, build_index
 from src.retrieve import retrieve, rrf_fuse
 
-
 # --------------------------- unit: RRF ------------------------------
 
 

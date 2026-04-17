@@ -55,7 +55,7 @@ def _dense_topk(index: IndexHandle, query: str, k: int) -> list[tuple[str, float
     res = index.collection.query(query_embeddings=qv, n_results=k)
     ids = res["ids"][0]
     # hnsw:space=cosine → distances are (1 - cosine_similarity).
-    distances = res["distances"][0]
+    distances = (res["distances"] or [[]])[0]
     return [(cid, 1.0 - float(d)) for cid, d in zip(ids, distances, strict=True)]
 
 
@@ -142,7 +142,7 @@ def retrieve(
     # Force reranker load before timing — first call can download ~2GB of weights.
     reranker = _get_reranker()
     t0 = time.time()
-    pairs = [(query, c.content) for c in candidates]
+    pairs: list[list[str]] = [[query, c.content] for c in candidates]
     raw = reranker.predict(pairs)
     rerank_scores = [float(s) for s in np.asarray(raw).tolist()]
     t_rerank = time.time() - t0

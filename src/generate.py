@@ -127,7 +127,7 @@ def _open_stream(client: Groq, messages: list[dict[str, str]]) -> Any:
     """Start the chat completion stream. 429s are retried; other errors propagate."""
     return client.chat.completions.create(
         model=settings.answer_model,
-        messages=messages,  # type: ignore[arg-type]
+        messages=messages,
         temperature=settings.answer_temperature,
         stream=True,
     )

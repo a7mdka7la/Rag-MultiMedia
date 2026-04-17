@@ -246,7 +246,8 @@ def _first_page_of_chunk(tc: Any) -> int | None:
     for item in getattr(meta, "doc_items", []) or []:
         prov = getattr(item, "prov", None)
         if prov:
-            return prov[0].page_no
+            page_no: int = prov[0].page_no
+            return page_no
     return None
 
 

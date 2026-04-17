@@ -8,7 +8,7 @@ fused scores so the reranker sees the right mix of text / table / image chunks.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Literal
+from typing import Literal, cast
 
 from groq import Groq
 from loguru import logger
@@ -68,4 +68,5 @@ def classify(query: str, *, client: Groq | None = None) -> RetrievalConfig:
     if label not in _VALID:
         logger.warning(f"router: unparseable class {raw!r}; defaulting to factual")
         label = "factual"
-    return RetrievalConfig(query_class=label, modality_boosts=dict(_CLASS_TO_BOOST[label]))
+    query_class = cast(QueryClass, label)
+    return RetrievalConfig(query_class=query_class, modality_boosts=dict(_CLASS_TO_BOOST[label]))

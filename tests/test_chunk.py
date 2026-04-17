@@ -19,7 +19,6 @@ from docling.document_converter import DocumentConverter, PdfFormatOption
 from src.chunk import Chunk, walk
 from src.utils import sha256_bytes
 
-
 # --------------------------- dataclass --------------------------
 
 

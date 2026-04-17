@@ -199,7 +199,7 @@ def main(
     )
 
     # `result` is a dict-like mapping metric-name → list[float]
-    scores = {k: list(result[k]) for k in result.scores[0].keys()} if hasattr(result, "scores") else dict(result)
+    scores = {k: list(result[k]) for k in result.scores[0]} if hasattr(result, "scores") else dict(result)
     _write_results_md(records, scores, out)
 
     print()

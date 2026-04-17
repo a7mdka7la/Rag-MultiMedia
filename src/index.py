@@ -11,13 +11,14 @@ content hash matches and we skip straight to `load_index`.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import pickle
 import time
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import chromadb
 import typer
@@ -81,7 +82,7 @@ def _load_chunks(path: Path) -> list[Chunk]:
 class IndexHandle:
     """Everything a retriever needs: dense collection + sparse BM25 + shared embedder + chunks."""
 
-    collection: "Collection"
+    collection: Collection
     bm25: BM25Okapi
     bm25_ids: list[str]          # chunk ids aligned with bm25 corpus order
     embedder: SentenceTransformer
@@ -151,10 +152,8 @@ def build_index(
 
     # --- Chroma persistent collection (recreate so upsert semantics are clean) ---
     client = chromadb.PersistentClient(path=str(out_dir))
-    try:
+    with contextlib.suppress(Exception):  # collection may not exist yet
         client.delete_collection(settings.chroma_collection_name)
-    except Exception:  # noqa: BLE001  — collection may not exist yet; either is fine
-        pass
     collection = client.create_collection(
         name=settings.chroma_collection_name,
         metadata={"hnsw:space": "cosine"},  # BGE-M3 embeddings are L2-normalized → cosine

@@ -19,7 +19,7 @@ import fitz  # pymupdf
 import streamlit as st
 
 from src.config import settings
-from src.generate import answer_stream, parse_citations, _resolve_chunk_refs
+from src.generate import _resolve_chunk_refs, answer_stream, parse_citations
 from src.index import load_index
 from src.retrieve import RetrievedChunk, retrieve
 

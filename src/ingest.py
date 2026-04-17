@@ -27,7 +27,7 @@ from loguru import logger
 from src.caption import Captioner
 from src.chunk import Chunk, walk
 from src.config import settings
-from src.utils import ensure_dir, sha256_bytes, setup_logging
+from src.utils import ensure_dir, setup_logging, sha256_bytes
 
 app = typer.Typer(add_completion=False, no_args_is_help=False)
 
@@ -44,7 +44,8 @@ def _parse_pdf(pdf_path: Path, cache_dir: Path, *, force: bool) -> DoclingDocume
     if parse_cache.exists() and not force:
         logger.info(f"Using cached Docling parse at {parse_cache.name}")
         with parse_cache.open("rb") as f:
-            return pickle.load(f)
+            cached: DoclingDocument = pickle.load(f)
+            return cached
 
     logger.info(f"Parsing {pdf_path.name} with Docling (do_ocr=False, images_scale=2.0)...")
     opts = PdfPipelineOptions()
@@ -55,7 +56,7 @@ def _parse_pdf(pdf_path: Path, cache_dir: Path, *, force: bool) -> DoclingDocume
         format_options={InputFormat.PDF: PdfFormatOption(pipeline_options=opts)},
     )
     t0 = time.time()
-    doc = converter.convert(pdf_path).document
+    doc: DoclingDocument = converter.convert(pdf_path).document
     logger.info(f"Docling parse done in {time.time() - t0:.1f}s")
     with parse_cache.open("wb") as f:
         pickle.dump(doc, f, protocol=pickle.HIGHEST_PROTOCOL)
