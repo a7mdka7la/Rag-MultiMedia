@@ -61,6 +61,7 @@ class Settings:
     # Secrets — empty string is allowed so the module loads without keys;
     # call require_key() at the point of use.
     google_api_key: str
+    google_api_keys: tuple[str, ...]
     groq_api_key: str
 
     # Paths
@@ -120,10 +121,28 @@ class Settings:
             raise ValueError(f"Unknown LOG_LEVEL: {self.log_level!r}")
 
 
+def _load_google_api_keys() -> tuple[str, ...]:
+    """Parse GOOGLE_API_KEYS (comma-separated) with GOOGLE_API_KEY as fallback.
+
+    Gemini's free tier is 20 requests/day per key; to keep one-shot ingest
+    feasible we support rotating across multiple keys. If GOOGLE_API_KEYS is
+    unset, fall back to the single primary key so the test suite and older
+    configs keep working.
+    """
+    multi = _env_str("GOOGLE_API_KEYS")
+    if multi:
+        keys = tuple(k.strip() for k in multi.split(",") if k.strip())
+        if keys:
+            return keys
+    single = _env_str("GOOGLE_API_KEY")
+    return (single,) if single else ()
+
+
 def _load() -> Settings:
     """Build the process-wide Settings from environment variables."""
     return Settings(
         google_api_key=_env_str("GOOGLE_API_KEY"),
+        google_api_keys=_load_google_api_keys(),
         groq_api_key=_env_str("GROQ_API_KEY"),
         project_root=_PROJECT_ROOT,
         pdf_path=_resolve(_env_str("PDF_PATH", "data/source.pdf")),

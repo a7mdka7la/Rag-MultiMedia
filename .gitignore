@@ -20,6 +20,10 @@ data/images/
 data/cache/
 data/chunks.jsonl
 data/chroma_db/
+data/ingest.log
+
+# Claude Code local state (not part of the project)
+.claude/
 
 # OS / IDE
 .DS_Store
