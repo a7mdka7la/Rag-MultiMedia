@@ -1,0 +1,30 @@
+# Secrets
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+
+# Virtualenv / uv
+.venv/
+venv/
+
+# Project data (large, generated, or private)
+data/source.pdf
+data/images/
+data/cache/
+data/chunks.jsonl
+data/chroma_db/
+
+# OS / IDE
+.DS_Store
+.idea/
+.vscode/
+
+# Eval output
+eval/results.md
