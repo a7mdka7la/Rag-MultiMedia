@@ -20,6 +20,7 @@ from sentence_transformers import CrossEncoder
 from src.chunk import Chunk
 from src.config import settings
 from src.index import IndexHandle, load_index, tokenize
+from src.router import RetrievalConfig, classify
 from src.utils import setup_logging
 
 app = typer.Typer(add_completion=False, no_args_is_help=True)
@@ -89,15 +90,19 @@ def retrieve(
     bm25_top_k: int | None = None,
     rerank_top_k: int | None = None,
     final_top_k: int | None = None,
+    use_router: bool | None = None,
     debug: bool = False,
 ) -> list[RetrievedChunk]:
-    """Hybrid retrieval: dense + BM25 → RRF → CrossEncoder rerank → top-k.
+    """Hybrid retrieval: dense + BM25 → RRF → (optional router boost) → rerank → top-k.
 
     Args:
         query: user question.
         index: loaded :class:`IndexHandle`.
         dense_top_k, bm25_top_k, rerank_top_k, final_top_k: per-stage cut-offs;
             default to the values in :mod:`src.config`.
+        use_router: override :attr:`settings.use_router` for this call. When True
+            the query is classified and modality-specific boosts multiply the
+            fused RRF scores before the rerank slice.
         debug: if True, log per-stage top-5 results and timings.
 
     Returns:
@@ -107,6 +112,7 @@ def retrieve(
     bm25_k = bm25_top_k or settings.bm25_top_k
     rerank_k = rerank_top_k or settings.rerank_top_k
     final_k = final_top_k or settings.final_top_k
+    router_on = settings.use_router if use_router is None else use_router
 
     t0 = time.time()
     dense_hits = _dense_topk(index, query, dense_k)
@@ -123,6 +129,10 @@ def retrieve(
     rrf_scores = dict(fused)
     candidate_ids = [cid for cid, _ in fused[:rerank_k]]
 
+    router_config: RetrievalConfig | None = None
+    if router_on:
+        router_config = classify(query)
+
     # Filter out any candidates that somehow aren't in chunks_by_id (shouldn't happen,
     # but keeps us robust against a stale Chroma collection).
     candidates = [index.chunks_by_id[cid] for cid in candidate_ids if cid in index.chunks_by_id]
@@ -137,7 +147,15 @@ def retrieve(
     rerank_scores = [float(s) for s in np.asarray(raw).tolist()]
     t_rerank = time.time() - t0
 
-    order = sorted(range(len(candidates)), key=lambda i: rerank_scores[i], reverse=True)[:final_k]
+    # Router: nudge the final ordering toward the expected modality. We sort on a
+    # boosted score but keep `rerank_scores[i]` as the reported score (boost is a
+    # tie-breaker / ordering tweak, not a "real" relevance signal).
+    boosts = router_config.modality_boosts if router_config else {}
+    final_scores = [
+        rerank_scores[i] * boosts.get(candidates[i].modality, 1.0)
+        for i in range(len(candidates))
+    ]
+    order = sorted(range(len(candidates)), key=lambda i: final_scores[i], reverse=True)[:final_k]
 
     results: list[RetrievedChunk] = []
     for rank, i in enumerate(order):
@@ -157,6 +175,10 @@ def retrieve(
         )
 
     if debug:
+        if router_config is not None:
+            logger.info(
+                f"router: class={router_config.query_class} boosts={router_config.modality_boosts}"
+            )
         logger.info(
             f"timings — dense: {t_dense*1000:.0f}ms  "
             f"bm25: {t_bm25*1000:.0f}ms  rerank: {t_rerank*1000:.0f}ms"
@@ -195,6 +217,9 @@ def _snippet(text: str, n: int) -> str:
 def main(
     query: str = typer.Argument(..., help="Query string."),
     debug: bool = typer.Option(False, "--debug", help="Log per-stage top-5 + timings."),
+    router: bool = typer.Option(
+        None, "--router/--no-router", help="Force router on/off (else uses USE_ROUTER env)."
+    ),
     index_dir: Path = typer.Option(
         None, "--index", help="Chroma directory (bm25.pkl + manifest.json). Defaults to CHROMA_PATH."
     ),
@@ -203,7 +228,7 @@ def main(
     setup_logging()
     out = (index_dir or settings.chroma_path).resolve()
     index = load_index(out)
-    results = retrieve(query, index, debug=debug)
+    results = retrieve(query, index, use_router=router, debug=debug)
     print()
     for r in results:
         print(

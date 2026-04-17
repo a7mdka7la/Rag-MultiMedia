@@ -83,7 +83,11 @@ with st.sidebar:
     st.caption(
         f"**PDF**: {'✅ `' + settings.pdf_path.name + '`' if pdf_exists else '⚠️ not found — page highlights disabled'}"
     )
-    st.caption(f"**Router**: {'on' if settings.use_router else 'off (Phase 6)'}")
+    use_router = st.toggle(
+        "Query router",
+        value=settings.use_router,
+        help="Classify the query and boost modality-appropriate chunks before rerank.",
+    )
     st.divider()
     if st.button("Clear conversation"):
         st.session_state.messages = []
@@ -156,7 +160,7 @@ if prompt:
 
     with st.chat_message("assistant"):
         with st.spinner("Retrieving + reranking…"):
-            retrieved = retrieve(prompt, index)
+            retrieved = retrieve(prompt, index, use_router=use_router)
 
         placeholder = st.empty()
         parts: list[str] = []
