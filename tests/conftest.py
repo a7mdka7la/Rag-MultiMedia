@@ -19,3 +19,4 @@ def sample_pdf() -> Path:
             "'uv run python scripts/make_fixture_pdf.py' (created in Phase 1)"
         )
     return path
+    

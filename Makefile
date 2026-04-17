@@ -16,10 +16,10 @@ help:
 	@echo "  clean   — remove generated data (chroma_db, chunks.jsonl, cache)"
 
 parse:
-	@echo "TODO: implement in Phase 1 — 'uv run python -m src.ingest --pdf data/source.pdf --out data/'"
+	uv run python -m src.ingest --pdf data/source.pdf --out data/
 
 index:
-	@echo "TODO: implement in Phase 2 — 'uv run python -m src.index --chunks data/chunks.jsonl --out data/chroma_db'"
+	uv run python -m src.index --chunks data/chunks.jsonl --out data/chroma_db
 
 ingest: parse index
 
