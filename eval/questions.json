@@ -1,0 +1,12 @@
+[
+  {
+    "question": "What does the report say about inflation in Egypt?",
+    "ground_truth": "Headline inflation declined from its peak, supported by a tighter monetary stance and the effects of the exchange rate depreciation fading.",
+    "modality": "text"
+  },
+  {
+    "question": "What is the projected real GDP growth for 2024/25?",
+    "ground_truth": "Real GDP growth is projected to recover to around 4 percent in FY2024/25.",
+    "modality": "table"
+  }
+]

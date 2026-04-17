@@ -27,7 +27,7 @@ run:
 	uv run streamlit run app.py
 
 eval:
-	@echo "TODO: implement in Phase 7 — 'uv run python -m eval.run_eval'"
+	uv run python -m eval.run_eval --questions eval/questions.json --out eval/results.md
 
 test:
 	uv run pytest -q
