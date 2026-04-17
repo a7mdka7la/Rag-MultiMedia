@@ -79,12 +79,13 @@ def _load_chunks(path: Path) -> list[Chunk]:
 
 @dataclass(slots=True)
 class IndexHandle:
-    """Everything a retriever needs: dense collection + sparse BM25 + shared embedder."""
+    """Everything a retriever needs: dense collection + sparse BM25 + shared embedder + chunks."""
 
     collection: "Collection"
     bm25: BM25Okapi
     bm25_ids: list[str]          # chunk ids aligned with bm25 corpus order
     embedder: SentenceTransformer
+    chunks_by_id: dict[str, Chunk]  # id → full Chunk; used by retrieve to resolve hits
 
 
 def build_index(
@@ -177,7 +178,14 @@ def build_index(
     bm25 = BM25Okapi(corpus)
     with (out_dir / _BM25_NAME).open("wb") as f:
         pickle.dump(
-            {"bm25": bm25, "ids": ids, "tokenized_corpus": corpus},
+            {
+                "bm25": bm25,
+                "ids": ids,
+                "tokenized_corpus": corpus,
+                # Phase 3 needs full Chunk objects (bbox / image_path / section)
+                # to resolve retrieval hits back to the UI.
+                "chunks": chunks,
+            },
             f,
             protocol=pickle.HIGHEST_PROTOCOL,
         )
@@ -206,6 +214,7 @@ def build_index(
         bm25=bm25,
         bm25_ids=ids,
         embedder=embedder,
+        chunks_by_id={c.id: c for c in chunks},
     )
 
 
@@ -229,6 +238,11 @@ def load_index(out_dir: Path) -> IndexHandle:
     collection = client.get_collection(name=settings.chroma_collection_name)
     with bm25_path.open("rb") as f:
         bm25_data = pickle.load(f)
+    chunks = bm25_data.get("chunks")
+    if chunks is None:
+        raise RuntimeError(
+            "bm25.pkl is missing 'chunks' — rebuild with `make index` (Phase 3 format)."
+        )
     embedder = SentenceTransformer(settings.embedding_model)
     embedder.max_seq_length = 1024
     return IndexHandle(
@@ -236,6 +250,7 @@ def load_index(out_dir: Path) -> IndexHandle:
         bm25=bm25_data["bm25"],
         bm25_ids=bm25_data["ids"],
         embedder=embedder,
+        chunks_by_id={c.id: c for c in chunks},
     )
 
 
