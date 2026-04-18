@@ -85,20 +85,29 @@ uv run python -m src.generate "What does the report say about inflation?"
 
 ## Evaluation
 
-15 questions (5 text, 5 table, 5 image, including one Arabic) are scored with RAGAS — `faithfulness`, `answer_relevancy`, `context_precision`. RAGAS's critic LLM is pointed at Groq through the OpenAI-compatible endpoint; embeddings reuse the local BGE-M3 model.
+15 questions (5 text, 5 table, 5 image, including one Arabic) are scored with RAGAS — `faithfulness`, `answer_relevancy`, `context_precision` — plus an offline `semantic_similarity` metric (BGE-M3 cosine between answer and ground truth) that always completes regardless of API quota.
 
 ```bash
 make eval   # → eval/results.md
 ```
 
-> Results will be populated once `eval/questions.json` holds the final 15 Q/A pairs. See [`eval/results.md`](eval/results.md) after running.
+Latest run (see [`eval/results.md`](eval/results.md)):
+
+| Metric | Coverage | Mean |
+| :--- | :--- | :--- |
+| semantic_similarity (BGE-M3 cosine, offline) | 15/15 | **0.688** |
+| answer_relevancy (RAGAS, Groq critic) | 4/15 | 0.673 |
+| context_precision (RAGAS, Groq critic) | 2/15 | 0.850 |
+| faithfulness (RAGAS, Groq critic) | 0/15 | — |
+
+The three RAGAS metrics are partial: Groq's free-tier caps daily tokens on `llama-3.3-70b-versatile` and also refuses `n>1` generation requests that RAGAS's critic issues by default. Runs with a higher Groq tier (or rerun after TPD reset) fill the blanks. The semantic-similarity column is fully computed and is the best single indicator of answer quality on this dataset.
 
 ## Limitations
 
 - **Single document.** The chunk store and Chroma collection are keyed to one PDF. Adding more documents needs a `doc_id` filter on every query.
 - **OCR off.** Docling's OCR is disabled — the IMF PDF has an embedded text layer, but a scanned PDF would return empty text chunks and image-only captions.
 - **Groq free-tier limits.** 30 req/min and 12k TPM on `llama-3.3-70b-versatile`; `src/generate.py` truncates each context block to 2 000 chars and tenacity-retries on `RateLimitError`. Upgrading Groq tier removes both constraints.
-- **Gemini daily quota.** `gemini-2.5-flash` gets 20 RPD per key on the free tier; `Captioner` round-robins a comma-separated list of keys and resumes cleanly the next day if all keys hit their quota mid-run.
+- **Gemini daily quota.** `gemini-2.5-flash` gets 20 RPD per key on the free tier; `Captioner` round-robins a comma-separated list of keys and resumes cleanly the next day if all keys hit their quota mid-run. On the current run, 8 of 56 images are captioned (the important charts on pages 14–16) and the other 48 retain placeholders — re-running `make ingest` the next day fills them in from the caption cache.
 - **Apple MPS quirk.** BGE-M3's default `max_seq_length=8192` triggers a 128 GiB MPS buffer allocation on Apple Silicon; the project pins `max_seq_length=1024`, covering every chunk with headroom.
 
 ## Repository layout

@@ -1,12 +1,77 @@
 [
   {
-    "question": "What does the report say about inflation in Egypt?",
-    "ground_truth": "Headline inflation declined from its peak, supported by a tighter monetary stance and the effects of the exchange rate depreciation fading.",
+    "question": "How many Sudanese refugees were registered in Egypt as of December 31, 2024?",
+    "ground_truth": "Some 603,000 Sudanese refugees were registered with UNHCR in Egypt as of December 31, 2024.",
     "modality": "text"
   },
   {
-    "question": "What is the projected real GDP growth for 2024/25?",
-    "ground_truth": "Real GDP growth is projected to recover to around 4 percent in FY2024/25.",
+    "question": "By how much did trade disruptions in the Red Sea reduce foreign exchange inflows from the Suez Canal in 2024?",
+    "ground_truth": "Trade disruptions in the Red Sea since December 2023 reduced foreign exchange inflows from the Suez Canal by about US$6 billion in 2024, while transit trade volumes remained at roughly one third of pre-conflict levels.",
+    "modality": "text"
+  },
+  {
+    "question": "What does the report say about Egypt's sovereign-bank nexus?",
+    "ground_truth": "Egypt's sovereign-bank nexus is among the highest in the world, with a steady increase in sovereign risk on banks' balance sheets through direct lending and holdings of government securities, resulting in poor private sector intermediation and significant crowding out.",
+    "modality": "text"
+  },
+  {
+    "question": "How does Egypt's climate risk compare to other economies?",
+    "ground_truth": "Egypt has a higher climate risk indicator than MENA comparator emerging economies and the world-wide average, and almost twice the risk of advanced economies, driven by temperature and heat stress, rising sea levels, water scarcity, droughts, and floods.",
+    "modality": "text"
+  },
+  {
+    "question": "ما هي التحديات الرئيسية التي تواجه الاقتصاد المصري بسبب حرب السودان؟",
+    "ground_truth": "أدت حرب السودان التي اندلعت في أبريل 2023 إلى تدفق كبير من اللاجئين إلى مصر، حيث سُجِّل نحو 603,000 لاجئ سوداني لدى المفوضية السامية للأمم المتحدة حتى 31 ديسمبر 2024.",
+    "modality": "text"
+  },
+  {
+    "question": "What was Egypt's current account balance in fiscal year 2023/24?",
+    "ground_truth": "Egypt's current account balance was about -US$25.0 billion in fiscal year 2023/24 according to Table 2a (Balance of Payments).",
     "modality": "table"
+  },
+  {
+    "question": "What is the projected current account balance for Egypt in fiscal year 2024/25?",
+    "ground_truth": "The projected current account balance for FY 2024/25 is approximately -US$17.6 billion.",
+    "modality": "table"
+  },
+  {
+    "question": "What does Table 4 in the report cover, and in what units?",
+    "ground_truth": "Table 4 reports Egypt's general government operations — revenue, expenditure, and financing — in billions of Egyptian pounds, across fiscal years 2020/21 to 2029/30.",
+    "modality": "table"
+  },
+  {
+    "question": "What does Table 3a in the report cover?",
+    "ground_truth": "Table 3a covers Egypt's budget sector operations in billions of Egyptian pounds for fiscal years 2020/21 through 2029/30.",
+    "modality": "table"
+  },
+  {
+    "question": "What is the topic of Figure 6 on page 80 of the report?",
+    "ground_truth": "Figure 6 on page 80 presents Egypt's Medium-Term Risk Assessment.",
+    "modality": "table"
+  },
+  {
+    "question": "According to Figure 1, how did Egypt's quarterly real GDP growth evolve from 2015 through 2024?",
+    "ground_truth": "Figure 1 shows quarterly year-on-year real GDP growth from 2015Q1 to 2024Q3: relatively stable around 4–5% from mid-2017 to early 2020, a sharp dip into negative territory (~-3% to -4%) in mid-2020, a strong recovery peaking near 9% in late 2021, and a subsequent decline.",
+    "modality": "image"
+  },
+  {
+    "question": "What does Figure 2 indicate about Egypt's Purchasing Managers Index between mid-2021 and early 2024?",
+    "ground_truth": "Figure 2 shows Egypt's Purchasing Managers Index stayed largely below the 50-point expansion threshold from mid-2021 through early 2024, signalling economic contraction, with lows dipping below 42 in late 2022.",
+    "modality": "image"
+  },
+  {
+    "question": "What does Figure 3 show about Egypt's official versus market exchange rates?",
+    "ground_truth": "Figure 3 plots the CBE official rate against several market-clearing rates (parallel-market mid-rate, gold-implied, and GDR/ADR-implied) in EGP per USD, showing that prior to March 2024 the official rate stayed around 30–31 EGP/USD while market-clearing rates diverged significantly higher.",
+    "modality": "image"
+  },
+  {
+    "question": "What does Figure 5 compare, and for what period?",
+    "ground_truth": "Figure 5 is a box plot comparing daily exchange rate volatility of EGP/USD against other emerging market currencies (BRL/USD, IDR/USD, MXN/USD, ZAR/USD) since March 2024.",
+    "modality": "image"
+  },
+  {
+    "question": "What do the Current Account and Balance of Payments charts on page 16 show about the composition of Egypt's external position?",
+    "ground_truth": "Page 16 shows Figure 6 (Current Account) as a stacked bar chart disaggregating quarterly flows from 2021Q1 to 2024Q3 into oil/non-oil trade balances, income, services, and transfers with an overlay line for the overall deficit, which widened significantly in 2024; Figure 7 (Balance of Payments) shows the current-account deficit is largely financed by the financial account.",
+    "modality": "image"
   }
 ]

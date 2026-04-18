@@ -140,7 +140,7 @@ def _load_google_api_keys() -> tuple[str, ...]:
 
 def _load() -> Settings:
     """Build the process-wide Settings from environment variables."""
-    return Settings(
+    kwargs: dict[str, object] = dict(
         google_api_key=_env_str("GOOGLE_API_KEY"),
         google_api_keys=_load_google_api_keys(),
         groq_api_key=_env_str("GROQ_API_KEY"),
@@ -154,6 +154,13 @@ def _load() -> Settings:
         eval_inter_question_delay_s=_env_float("EVAL_INTER_QUESTION_DELAY_S", default=2.0),
         log_level=_env_str("LOG_LEVEL", "INFO"),
     )
+    # Optional overrides for the Groq model ids (useful when the 70B TPD is
+    # exhausted and we want the eval to keep running on the 8B instant tier).
+    if override := _env_str("ANSWER_MODEL"):
+        kwargs["answer_model"] = override
+    if override := _env_str("ROUTER_MODEL"):
+        kwargs["router_model"] = override
+    return Settings(**kwargs)
 
 
 settings: Final[Settings] = _load()
