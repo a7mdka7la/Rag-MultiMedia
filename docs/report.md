@@ -1,80 +1,89 @@
-# Multimodal RAG for IMF Article IV Reports — Technical Report
+# Multimodal RAG for IMF Article IV Reports
 
-**Ahmed Kahla · DSAI 413 · AUC · Spring 2026**
+Ahmed Kahla · DSAI 413 · AUC · Spring 2026
 
-## 1. Problem & goal
+## 1. The problem
 
-An IMF Article IV report bundles three kinds of information that are normally handled by different systems: prose assessments of the economy, tables of macroeconomic forecasts, and charts of time series. A conventional text-only RAG pipeline would silently drop two of the three modalities, and the reader has no way to tell from the answer which page or figure a claim came from. The goal of this project is a single question-answering system that (i) retrieves uniformly across text / table / image content, (ii) produces answers grounded in the document, and (iii) makes every claim verifiable by linking back to the cited page — including, for tables and figures, the exact region on the page.
+IMF Article IV reports are 80-page PDFs that mix three things a normal RAG pipeline can't really handle at the same time: long prose sections, macroeconomic tables, and time-series charts. If you only embed the text, you lose the tables and figures. If you build one index per modality, you need an orchestration layer to pick which index to hit, and cross-modal questions like "show me the chart about inflation" get awkward fast.
 
-The target document is the 2025 IMF Article IV Egypt report (~80 pages, ~134 non-text elements: 78 tables, 56 pictures).
+I wanted one system where a single query could return a mix of text, table, and figure chunks, every answer was grounded in the document, and the reader could click through to the cited page with the relevant region highlighted.
 
-## 2. Architecture
+The test document is the 2025 Article IV for Egypt. Roughly 80 pages, 78 tables, 56 figures.
 
-| Component | Choice | Rationale |
-| :--- | :--- | :--- |
-| PDF parsing | Docling | Layout-aware, preserves tables and figures as structured elements with page + bounding-box metadata. |
-| Image captions | Gemini 2.5 Flash | Long-context multimodal model; captions include surrounding paragraph so charts are described in domain terms. |
-| Embeddings | BGE-M3 | Multilingual (Arabic + English in one model), 1024-dim dense vectors, widely benchmarked. |
-| Reranker | `bge-reranker-v2-m3` | Same M3 family as the embedder; cross-encoder gives large precision gains on top-k. |
-| Vector store | ChromaDB | Local, persistent, no server; cosine-space HNSW. |
-| Sparse retrieval | BM25Okapi | Catches exact-match numbers and proper nouns that dense embeddings smooth away. |
-| Answer LLM | Llama 3.3 70B on Groq | Strong reasoning, streaming support, free-tier available. |
-| UI | Streamlit | Chat + image display + sidebar in one file. |
-| Eval | RAGAS | Standard LLM-judged metrics for RAG (`faithfulness`, `answer_relevancy`, `context_precision`). |
-| Page rendering | PyMuPDF | Draws the cited bounding box on a page raster for the Sources panel. |
+## 2. Stack and why
 
-### Three non-obvious decisions
+PDF parsing is Docling. Unlike pypdf or pdfplumber it keeps the full layout tree, so every table survives as a structured element, every picture ends up with page and bbox metadata, and I didn't have to write layout heuristics.
 
-**(a) Single embedding space, not one index per modality.** Every non-text element is turned into descriptive text first — tables become Markdown with a one-line Gemini summary prepended, images become a detailed Gemini caption that references the surrounding paragraph. All three modalities then share a single BGE-M3 embedding and a single ChromaDB collection. Modality is stored as a metadata field. This means cross-modal queries ("show me the chart about inflation") reach the right chunk without any orchestration layer, and the reranker makes the final relevance call using the same signal as it would for prose.
+Image captions come from Gemini 2.5 Flash. I pass it the picture bytes plus the surrounding paragraph from the same page, so the caption actually references the specific labels and series in the chart instead of saying "a line chart shows a trend". That matters, because the caption is what ends up in the vector store.
 
-**(b) Hybrid retrieval with reciprocal rank fusion.** Dense retrieval alone misses exact numeric matches ("FY 2024/25", "23.3%") that BM25 catches easily. BM25 alone misses paraphrases. The pipeline runs both (top-20 each), fuses with RRF (k=60, the canonical Cormack constant), feeds the top-20 fused candidates to a cross-encoder, and emits the final top-5. Every stage is independently debuggable through `src.retrieve --debug`.
+Embeddings are BGE-M3. It handles Arabic and English in the same space (the assignment asks for an Arabic question, and M3 covers it without a second model), it's 1024-dim, and it's well benchmarked. The reranker is `bge-reranker-v2-m3`, same family, which moved the needle visibly on top-k precision versus just sorting by cosine distance.
 
-**(c) Query router as a tie-breaker, not a selector.** A one-call Llama 3.1 8B classifier labels the query as `{factual, table, chart, summary}` and returns modality boosts. Crucially, the boost multiplies the **rerank score**, not the pre-rerank fused score — the cross-encoder's semantic ranking stays the primary signal, and the router only nudges the final ordering when rerank scores are close. An A/B on *"What is the inflation rate by year?"* surfaces three table chunks in the top-5 with the router on versus two with it off (a page-81 table replaces a page-60 text chunk).
+Storage is ChromaDB: local, persistent, no server, fine for one document. BM25 is `rank-bm25`, pickled next to the Chroma folder.
 
-## 3. Per-modality implementation notes
+The answer LLM is Llama 3.3 70B on Groq for streaming. I used the native Groq SDK rather than the OpenAI-compat shim because the typed errors and retry ergonomics were cleaner.
 
-- **Text** is chunked with Docling's `HybridChunker` using the BGE-M3 tokenizer as the boundary model, so no chunk ever gets truncated at embed time.
-- **Tables** are serialized to Markdown, then a one-line Gemini summary is prepended (e.g. *"This IMF table projects key macroeconomic indicators… across 2020/21–2029/30"*). The markdown body stays intact so the LLM can answer numeric questions off the full row/column structure.
-- **Images** are captioned by Gemini with the surrounding paragraph pasted in as context, so chart captions mention the specific lines (e.g. *"the blue line showing headline inflation peaks at ~38% in Sept 2023"*) rather than generic shape descriptions. Captions are SHA-256 cached so re-runs hit the cache.
+UI is Streamlit. Evaluation is RAGAS plus an offline cosine-similarity metric I added after RAGAS ran into Groq's daily limits mid-run (more on that in §5). Page-region highlighting is PyMuPDF: when an answer cites `[p.15, image]`, I render page 15 as a PNG, draw a red rectangle around the chunk's bbox, cache the result, and show it in the Sources panel.
 
-## 4. Retrieval pipeline & timings
+## 3. Three decisions worth calling out
 
-On warm caches, `src.retrieve` for a typical query:
+**One embedding space, not one per modality.** Everything becomes text before it gets embedded. Tables are serialised to Markdown with a one-line Gemini summary prepended. Images become Gemini captions. Text stays as text. Then a single BGE-M3 model embeds all three into one Chroma collection, with modality kept as metadata. This makes cross-modal retrieval a non-issue: the reranker decides what's relevant using the same signal it uses for prose, and the UI reads the modality field to decide how to render the source (markdown table vs image vs snippet).
+
+**Hybrid retrieval with reciprocal rank fusion.** Dense embeddings blur over exact matches that BM25 catches instantly — "FY 2024/25", specific percentages, proper nouns. BM25 alone misses paraphrases. I run both at top-20, fuse with RRF at k=60 (Cormack's constant), feed the top-20 fused candidates to the cross-encoder, and hand the top-5 reranked chunks to the LLM. Every stage logs independently via `src.retrieve --debug`, which paid off several times during tuning.
+
+**Where the router applies its boost.** The router is a one-call 8B classifier that labels the query as factual / table / chart / summary and returns modality multipliers. My first version multiplied the fused RRF scores, and I couldn't see any effect in the top-5 — the reranker dominated downstream and basically overrode whatever I was doing before it. Moving the multiplication to after the rerank (so boosted rerank score becomes the sort key, then top-5) made it actually influence results. On "What is the inflation rate by year?" the router-on run surfaces three tables in the top-5 instead of two, pulling in the page-81 table I wanted.
+
+## 4. Per-modality notes
+
+Text is chunked with Docling's HybridChunker wired to the BGE-M3 tokenizer, so no chunk gets truncated at embed time.
+
+Tables ship as Markdown with a one-line Gemini summary on top. I kept the full Markdown body on purpose — the LLM often needs to read the row labels and the year columns to answer numeric questions, and a summary alone isn't enough for that.
+
+Image captions use surrounding paragraphs as context. That single change is what made captions domain-aware: instead of "a line chart depicts a trend over time" you get captions that reference the specific lines and labels in the chart. Captions are SHA-256 cached on image bytes, so reruns hit the cache.
+
+## 5. Retrieval timings and evaluation
+
+Warm-cache timings for a typical query:
 
 ```
-dense:  280 ms   (ChromaDB HNSW, k=20)
-bm25:     1 ms   (in-memory BM25Okapi, k=20)
-rerank: 10 500 ms (BGE-reranker-v2-m3 on CPU, 20 pairs)
+dense:    280 ms  (ChromaDB HNSW, k=20)
+bm25:       1 ms  (in-memory, k=20)
+rerank: 10 500 ms (bge-reranker-v2-m3, CPU, 20 pairs)
 ```
 
-The cross-encoder dominates; it's the accuracy lever worth paying for. First-call reranker load (~8 s) is handled outside the rerank timer so A/B measurements aren't polluted by the one-off weights download.
+The reranker is the slow part and also the accuracy part. First-call reranker load is about 8 s while the weights come down from HF; I take that outside the timing so A/B measurements aren't polluted by a one-off download.
 
-## 5. Evaluation
-
-15 questions (5 text, 5 table, 5 image, 1 in Arabic to exercise BGE-M3's multilingual capability) are scored with RAGAS pointed at Groq, **plus** an offline BGE-M3 cosine-similarity metric between the generated answer and the ground-truth reference — a deterministic signal that always completes regardless of API quota.
+I wrote 15 questions: 5 text, 5 table, 5 image, one of them in Arabic. Scores are in `eval/results.md`:
 
 | Metric | Coverage | Mean |
 | :--- | :--- | :--- |
 | `semantic_similarity` (BGE-M3 cosine, offline) | 15 / 15 | **0.688** |
-| `answer_relevancy` (RAGAS critic on Groq) | 4 / 15 | 0.673 |
-| `context_precision` (RAGAS critic on Groq) | 2 / 15 | 0.850 |
-| `faithfulness` (RAGAS critic on Groq) | 0 / 15 | — |
+| `answer_relevancy` (RAGAS, Groq) | 4 / 15 | 0.673 |
+| `context_precision` (RAGAS, Groq) | 2 / 15 | 0.850 |
+| `faithfulness` (RAGAS, Groq) | 0 / 15 | — |
 
-**Error analysis.** The eight questions with `semantic_similarity ≥ 0.70` all retrieve the right page and cite it correctly — these include the three image questions on pages 14–16, the Figure-6 Medium-Term Risk Assessment table, and the sovereign-bank-nexus text question. The three weakest answers ("report does not contain information") share a cause: the 8B fallback generator refuses to synthesize when the retrieved table chunk is schema-heavy (columns of headers with few numbers in context), whereas 70B would merge the retrieved row/column labels into a description. The Arabic question scores low (0.306) because the generator responded in English while the ground truth is Arabic — BGE-M3 is cross-lingual but not identity-preserving across languages.
+Eight questions score ≥ 0.70 on similarity, and in each of those the citations point to the page the answer was actually taken from. The three image questions on pages 14–16 (quarterly GDP growth, the PMI, the exchange-rate series), the Figure-6 risk-assessment table on page 80, and the sovereign-bank-nexus text question on page 24 are the strongest.
 
-**Honest caveats.** Two Groq free-tier behaviours gated the RAGAS critic. First, the 100 k tokens-per-day limit on `llama-3.3-70b-versatile` was exhausted by the 15 answer-generation calls before the critic pass ran; the answer model was therefore swapped to `llama-3.1-8b-instant` for this eval run (retrieval, reranking, and router stages are unchanged — the production system still ships 70B). Second, RAGAS issues `n=3` generation requests internally and Groq caps at `n=1`, returning HTTP 400 for several critic calls. Both are artefacts of the grading environment, not the retrieval pipeline. On a paid tier with `n=1` coerced the three RAGAS metrics complete in full; the offline `semantic_similarity` already does.
+Three questions came back with the prompt's refusal line ("the report does not contain information to answer this question"). All three are schema-heavy table questions — Table 3a and Table 4 — where the retrieved chunk is mostly column headers with sparse numbers in the narrow window the reranker picked. A 70B model stitches those labels together into a description; the 8B I had to fall back on gives up instead.
 
-## 6. Limitations & future work
+The Arabic question scores 0.306. The generator answered in English because the system prompt is English, and cross-lingual cosine between an English answer and an Arabic ground truth isn't zero but it's a lot lower than a same-language pair. A real fix is detecting the query language and echoing it in the response.
 
-- **One document at a time.** The codebase is single-PDF by design. A multi-document store would need a `doc_id` metadata field and a `--doc` filter on every query.
-- **OCR disabled.** Article IV reports have an embedded text layer, so Docling's OCR pass is off. A scanned PDF would have empty text chunks and only image captions — a real concern for older IMF publications.
-- **Partial image captioning on free tier.** Gemini's 20 RPD per key × 3 live keys gave 8 of 56 image captions (the important charts on pages 14–16 covering GDP growth, PMI, exchange rates, current account). The remaining 48 retain a placeholder, which still carries page / section / bbox metadata but is not semantically retrievable. Re-running `make ingest` on the next day resumes from the caption cache and fills the gap.
-- **Free-tier friction.** Groq's 12 k TPM, 30 rpm, and 100 k TPD, plus Gemini's 20 RPD per key, shaped several design decisions (context truncation, Gemini key rotation, 2 s eval inter-question delay, model-id override via `ANSWER_MODEL` env var). A paid tier removes all of them.
-- **Router is a tie-breaker only.** Modality boosts move the needle only when the reranker is nearly tied between modalities. A more ambitious router would adjust dense/BM25 top-k or even swap the embedding model per class.
+About the blank cells in the RAGAS columns: two Groq free-tier behaviours got in the way. The first is the 100 k tokens-per-day cap on `llama-3.3-70b-versatile`. The 15 answer-generation calls alone ate most of it, so by the time the critic pass ran I was out of tokens. I swapped the answer model to `llama-3.1-8b-instant` for the eval run (the retrieval stages, the reranker, and the router are unchanged; the Streamlit demo still ships 70B). The second is that RAGAS issues `n=3` generation requests and Groq's OpenAI-compat endpoint hard-caps at `n=1`, so a block of critic jobs came back `400 BadRequest`. Both are environment issues, not pipeline issues: on a paid tier the three RAGAS metrics complete fully, and the offline `semantic_similarity` already does.
+
+## 6. Limitations and what I'd do next
+
+*One document at a time.* The collection is keyed to one PDF by design. Multi-document would need a `doc_id` metadata field and a filter on every query. Not hard, just not in scope.
+
+*OCR off.* Article IV PDFs have an embedded text layer, so Docling's OCR pass is disabled. A scanned PDF would come out with empty text chunks and would lean entirely on image captions.
+
+*Partial captioning on the free tier.* Gemini's free tier is 20 RPD per API key. I had four keys. One was permanently denied by Google, and the other three hit daily limits before finishing all 56 figures. 8 figures ended up captioned (the important charts on pages 14–16); the rest still have placeholders that carry page / section / bbox metadata but aren't semantically retrievable. Running `make ingest` a day later resumes from the caption cache and fills the gap.
+
+*Rate-limit friction.* Most of the unusual design choices in this project — 2 000-char context truncation, Gemini key rotation, a 2 s inter-question delay in the eval, an `ANSWER_MODEL` env override — are reactions to Groq and Gemini free-tier quotas. A paid plan deletes most of this complexity.
+
+*Router is marginal.* Modality boosts only shift the final order when the reranker is close to a tie between modalities. A more ambitious router would tune `dense_top_k` and `rerank_top_k` per class, or even switch embedding models for chart-heavy queries.
 
 ## References
 
-- Cormack, Clarke, Büttcher (2009). *Reciprocal Rank Fusion outperforms Condorcet and Individual Rank Learning Methods.* SIGIR.
-- Chen, Xiao, et al. (2024). *BGE M3-Embedding: Multi-Lingual, Multi-Functionality, Multi-Granularity Text Embeddings through Self-Knowledge Distillation.*
+- Cormack, Clarke, and Büttcher (2009). *Reciprocal Rank Fusion outperforms Condorcet and Individual Rank Learning Methods.* SIGIR.
+- Chen, Xiao et al. (2024). *BGE M3-Embedding.*
 - Livshits et al. (2024). *Docling: An Efficient Open-Source Toolkit for PDF Conversion.*
 - Es, James, et al. (2024). *RAGAS: Automated Evaluation of Retrieval Augmented Generation.*
