@@ -129,7 +129,6 @@ docs/
   video_script.md          # 2–5 min demo script
 tests/                     # pytest — unit + integration per phase
 data/                      # source.pdf, chroma_db/, images/ — gitignored
-CLAUDE.md                  # working-context notes + every gotcha encountered
 ```
 
 ## Authorship
