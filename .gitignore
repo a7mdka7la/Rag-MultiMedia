@@ -26,6 +26,7 @@ data/streamlit.log
 
 # Claude Code local state (not part of the project)
 .claude/
+CLAUDE.md
 
 # OS / IDE
 .DS_Store
